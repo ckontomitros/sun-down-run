@@ -417,23 +417,28 @@ window.addEventListener('keyup', event => {
   if (key === 'arrowleft' || key === 'a') held.left = false;
   if (key === 'arrowright' || key === 'd') held.right = false;
 });
-let dragging = false, pointerX = 0;
+let dragging = false, dragPointerId = null, pointerStartX = 0, dragInput = 0;
 renderer.domElement.addEventListener('pointerdown', event => {
-  if (event.button !== 0) return;
+  if (!running || dragPointerId !== null || event.button !== 0) return;
   dragging = true;
-  pointerX = event.clientX;
+  dragPointerId = event.pointerId;
+  pointerStartX = event.clientX;
+  dragInput = 0;
   renderer.domElement.setPointerCapture(event.pointerId);
 });
 renderer.domElement.addEventListener('pointermove', event => {
-  if (!dragging) return;
-  const deltaX = event.clientX - pointerX;
-  // Apply the drag to the rider immediately; velocity only adds a little heading and release momentum.
-  steer = THREE.MathUtils.clamp(steer + deltaX / innerWidth * 18, -5.1, 5.1);
-  velocity = THREE.MathUtils.clamp(deltaX * .055, -7, 7);
-  pointerX = event.clientX;
+  if (!dragging || event.pointerId !== dragPointerId) return;
+  const dragRange = Math.max(innerWidth * .18, 72);
+  dragInput = THREE.MathUtils.clamp((event.clientX - pointerStartX) / dragRange, -1, 1);
 });
-renderer.domElement.addEventListener('pointerup', () => dragging = false);
-renderer.domElement.addEventListener('pointercancel', () => dragging = false);
+function endDrag(event) {
+  if (event.pointerId !== dragPointerId) return;
+  dragging = false;
+  dragPointerId = null;
+  dragInput = 0;
+}
+renderer.domElement.addEventListener('pointerup', endDrag);
+renderer.domElement.addEventListener('pointercancel', endDrag);
 
 function setSound(on) {
   if (on && !audioContext) {
@@ -489,9 +494,10 @@ function updateHouses() {
 }
 
 function updateScene(dt, time) {
-  const input = (held.left ? 1 : 0) - (held.right ? 1 : 0);
+  const keyboardInput = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+  const input = THREE.MathUtils.clamp(keyboardInput + dragInput, -1, 1);
   velocity += (input * 10 - velocity * 2.8) * dt;
-  if (!dragging) steer = THREE.MathUtils.clamp(steer + velocity * dt, -5.1, 5.1);
+  steer = THREE.MathUtils.clamp(steer + velocity * dt, -5.1, 5.1);
   runSpeed = Math.min(27, runSpeed + dt * .42);
   playerZ += runSpeed * dt;
   runDistance += runSpeed * dt;
