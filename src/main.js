@@ -218,6 +218,74 @@ for (let row = 0; row < 18; row++) {
   houses.push(makeHouse(1, row + 2, z + (row % 2 ? 3.2 : 0)));
 }
 
+// A few roadside work props break up the descent and leave plenty of open road between them.
+const obstacleCycle = roadLength * roadSegments.length;
+const obstacleOrangeMat = mat('#e86731', .72);
+const obstacleStripeMat = mat('#f2e6ce', .55);
+const obstacleCrateMat = mat('#80553a', .9);
+const obstacleWoodMat = mat('#bd8b5c', .82);
+const obstaclePattern = [
+  { z: 72, offset: 3.9, kind: 'barrel' },
+  { z: 216, offset: -3.8, kind: 'crate' },
+  { z: 366, offset: .2, kind: 'barrel' },
+];
+
+function makeRoadObstacle(pattern, index) {
+  const group = new THREE.Group();
+  if (pattern.kind === 'barrel') {
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(.48, .42, 1.12, 12), obstacleOrangeMat);
+    barrel.position.y = .6; barrel.castShadow = true; barrel.receiveShadow = true; group.add(barrel);
+    for (const y of [.36, .83]) {
+      const stripe = new THREE.Mesh(new THREE.CylinderGeometry(.49, .44, .13, 12), obstacleStripeMat);
+      stripe.position.y = y; stripe.castShadow = true; group.add(stripe);
+    }
+  } else {
+    addBox(group, boxGeo, obstacleCrateMat, [0, .55, 0], [1.08, 1.08, .98]);
+    for (const x of [-.32, 0, .32]) {
+      addBox(group, boxGeo, obstacleWoodMat, [x, .55, .51], [.11, .98, .045], false);
+    }
+    for (const y of [.2, .9]) {
+      addBox(group, boxGeo, obstacleWoodMat, [0, y, .54], [1.02, .11, .045], false);
+    }
+  }
+  group.userData.worldZ = pattern.z;
+  group.userData.offset = pattern.offset;
+  group.userData.index = index;
+  group.userData.kind = pattern.kind;
+  group.position.set(laneCurve(pattern.z) + pattern.offset, groundY(pattern.z), pattern.z);
+  scene.add(group);
+  return group;
+}
+
+const obstacles = obstaclePattern.map(makeRoadObstacle);
+
+function updateObstacles(playerX) {
+  for (const obstacle of obstacles) {
+    const worldZ = obstacle.userData.worldZ;
+    if (playerZ > worldZ + 8) {
+      obstacle.userData.worldZ += obstacleCycle;
+      obstacle.position.set(
+        laneCurve(obstacle.userData.worldZ) + obstacle.userData.offset,
+        groundY(obstacle.userData.worldZ),
+        obstacle.userData.worldZ,
+      );
+      continue;
+    }
+
+    const distanceX = playerX - obstacle.position.x;
+    if (Math.abs(playerZ - worldZ) < 1.65 && Math.abs(distanceX) < .92) {
+      runSpeed = Math.max(9, runSpeed * .68);
+      velocity += (Math.sign(distanceX) || (obstacle.userData.index % 2 ? 1 : -1)) * 2.4;
+      obstacle.userData.worldZ += obstacleCycle;
+      obstacle.position.set(
+        laneCurve(obstacle.userData.worldZ) + obstacle.userData.offset,
+        groundY(obstacle.userData.worldZ),
+        obstacle.userData.worldZ,
+      );
+    }
+  }
+}
+
 const ocean = new THREE.Mesh(new THREE.PlaneGeometry(1200, 1500, 1, 1), seaMat);
 ocean.rotation.x = -Math.PI / 2;
 ocean.position.set(0, groundY(305) - 5, 920);
@@ -421,7 +489,7 @@ let dragging = false, dragPointerId = null, dragInput = 0;
 function pointToDragInput(event) {
   const bounds = renderer.domElement.getBoundingClientRect();
   const normalizedX = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
-  dragInput = THREE.MathUtils.clamp(normalizedX, -1, 1);
+  dragInput = THREE.MathUtils.clamp(-normalizedX, -1, 1);
 }
 renderer.domElement.addEventListener('pointerdown', event => {
   if (!running || dragPointerId !== null || event.button !== 0) return;
@@ -497,7 +565,7 @@ function updateHouses() {
 }
 
 function updateScene(dt, time) {
-  const keyboardInput = (held.right ? 1 : 0) - (held.left ? 1 : 0);
+  const keyboardInput = (held.left ? 1 : 0) - (held.right ? 1 : 0);
   const input = THREE.MathUtils.clamp(keyboardInput + dragInput, -1, 1);
   velocity += (input * 10 - velocity * 2.8) * dt;
   steer = THREE.MathUtils.clamp(steer + velocity * dt, -5.1, 5.1);
@@ -509,6 +577,7 @@ function updateScene(dt, time) {
   const roadX = laneCurve(playerZ);
   const playerX = roadX + steer;
   const playerY = groundY(playerZ);
+  updateObstacles(playerX);
   board.position.set(playerX, playerY, playerZ);
   const desiredHeading = THREE.MathUtils.clamp(Math.atan2(velocity * 2.3, runSpeed), -.62, .62);
   board.rotation.y += (desiredHeading - board.rotation.y) * (1 - Math.exp(-dt * 4.8));
