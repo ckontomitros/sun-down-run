@@ -417,30 +417,27 @@ window.addEventListener('keyup', event => {
   if (key === 'arrowleft' || key === 'a') held.left = false;
   if (key === 'arrowright' || key === 'd') held.right = false;
 });
-let dragging = false, dragPointerId = null, pointerStartX = 0, pointerX = 0, dragLastMoveAt = 0, dragInput = 0;
+let dragging = false, dragPointerId = null, dragInput = 0;
+function pointToDragInput(event) {
+  const bounds = renderer.domElement.getBoundingClientRect();
+  const normalizedX = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
+  dragInput = THREE.MathUtils.clamp(normalizedX, -1, 1);
+}
 renderer.domElement.addEventListener('pointerdown', event => {
   if (!running || dragPointerId !== null || event.button !== 0) return;
   dragging = true;
   dragPointerId = event.pointerId;
-  pointerStartX = pointerX = event.clientX;
-  dragLastMoveAt = 0;
-  dragInput = 0;
+  pointToDragInput(event);
   renderer.domElement.setPointerCapture(event.pointerId);
 });
 renderer.domElement.addEventListener('pointermove', event => {
   if (!dragging || event.pointerId !== dragPointerId) return;
-  const now = performance.now();
-  if (dragLastMoveAt && now - dragLastMoveAt > 140) pointerStartX = pointerX;
-  const dragRange = Math.max(innerWidth * .18, 72);
-  pointerX = event.clientX;
-  dragLastMoveAt = now;
-  dragInput = THREE.MathUtils.clamp((pointerX - pointerStartX) / dragRange, -1, 1);
+  pointToDragInput(event);
 });
 function endDrag(event) {
   if (event.pointerId !== dragPointerId) return;
   dragging = false;
   dragPointerId = null;
-  dragLastMoveAt = 0;
   dragInput = 0;
 }
 renderer.domElement.addEventListener('pointerup', endDrag);
@@ -500,12 +497,6 @@ function updateHouses() {
 }
 
 function updateScene(dt, time) {
-  // When a swipe settles, make the resting finger position the next neutral reference.
-  if (dragging && dragLastMoveAt && performance.now() - dragLastMoveAt > 140) {
-    pointerStartX = pointerX;
-    dragLastMoveAt = 0;
-    dragInput = 0;
-  }
   const keyboardInput = (held.right ? 1 : 0) - (held.left ? 1 : 0);
   const input = THREE.MathUtils.clamp(keyboardInput + dragInput, -1, 1);
   velocity += (input * 10 - velocity * 2.8) * dt;
