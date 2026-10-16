@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#4a9cac">
+  <title>Sun Down Run — Coastal Descent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main id="game" aria-label="Sun Down Run 3D game">
+    <div class="hud">
+      <div class="top">
+        <div class="brand">SUN DOWN RUN<span>COASTAL SKATE DESCENT · 3D</span></div>
+        <div class="stats">
+          <div class="pill"><div class="label">DISTANCE</div><div class="value"><span id="dist">0</span><small> m</small></div></div>
+          <div class="pill"><div class="label">BEST</div><div class="value"><span id="best">0</span><small> m</small></div></div>
+        </div>
+      </div>
+      <div class="bottom">
+        <div class="hint"><span class="desktop">← → / A D &nbsp; STEER &nbsp;·&nbsp; SPACE TO START</span><span class="mobile">DRAG TO STEER</span></div>
+        <button class="sound" id="sound" aria-label="Toggle sound">♫ &nbsp; SOUND OFF</button>
+      </div>
+    </div>
+    <div class="overlay" id="overlay">
+      <section class="card">
+        <div class="eyebrow">A LITTLE COASTAL ESCAPE</div>
+        <h1 id="title">ROLL<br>WITH IT.</h1>
+        <p id="copy">A steep road, a bright blue horizon, and a longboard ready to roll. Steer through a little seaside town as the board turns smoothly into your line downhill.</p>
+        <button class="start" id="start">Start rolling</button>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
