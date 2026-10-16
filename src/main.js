@@ -225,9 +225,12 @@ const obstacleStripeMat = mat('#f2e6ce', .55);
 const obstacleCrateMat = mat('#80553a', .9);
 const obstacleWoodMat = mat('#bd8b5c', .82);
 const obstaclePattern = [
-  { z: 72, offset: 3.9, kind: 'barrel' },
-  { z: 216, offset: -3.8, kind: 'crate' },
-  { z: 366, offset: .2, kind: 'barrel' },
+  { z: 58, offset: 3.9, kind: 'barrel' },
+  { z: 128, offset: -3.7, kind: 'crate' },
+  { z: 206, offset: .2, kind: 'barrel' },
+  { z: 282, offset: 4.1, kind: 'crate' },
+  { z: 354, offset: -3.9, kind: 'barrel' },
+  { z: 428, offset: 1.8, kind: 'crate' },
 ];
 
 function makeRoadObstacle(pattern, index) {
@@ -249,6 +252,7 @@ function makeRoadObstacle(pattern, index) {
     }
   }
   group.userData.worldZ = pattern.z;
+  group.userData.startZ = pattern.z;
   group.userData.offset = pattern.offset;
   group.userData.index = index;
   group.userData.kind = pattern.kind;
@@ -258,6 +262,17 @@ function makeRoadObstacle(pattern, index) {
 }
 
 const obstacles = obstaclePattern.map(makeRoadObstacle);
+
+function resetObstacles() {
+  for (const obstacle of obstacles) {
+    obstacle.userData.worldZ = obstacle.userData.startZ;
+    obstacle.position.set(
+      laneCurve(obstacle.userData.worldZ) + obstacle.userData.offset,
+      groundY(obstacle.userData.worldZ),
+      obstacle.userData.worldZ,
+    );
+  }
+}
 
 function updateObstacles(playerX) {
   for (const obstacle of obstacles) {
@@ -274,14 +289,8 @@ function updateObstacles(playerX) {
 
     const distanceX = playerX - obstacle.position.x;
     if (Math.abs(playerZ - worldZ) < 1.65 && Math.abs(distanceX) < .92) {
-      runSpeed = Math.max(9, runSpeed * .68);
-      velocity += (Math.sign(distanceX) || (obstacle.userData.index % 2 ? 1 : -1)) * 2.4;
-      obstacle.userData.worldZ += obstacleCycle;
-      obstacle.position.set(
-        laneCurve(obstacle.userData.worldZ) + obstacle.userData.offset,
-        groundY(obstacle.userData.worldZ),
-        obstacle.userData.worldZ,
-      );
+      endRun();
+      return;
     }
   }
 }
@@ -468,9 +477,26 @@ const held = { left: false, right: false };
 
 function begin() {
   running = true; playerZ = 0; steer = 0; velocity = 0; cameraX = 0; runDistance = 0; runSpeed = 12;
+  resetObstacles();
   startButton.textContent = 'Start rolling';
   overlay.classList.add('hidden');
   previousTime = performance.now();
+}
+
+function endRun() {
+  running = false;
+  playerZ = 0;
+  steer = 0;
+  velocity = 0;
+  cameraX = 0;
+  runDistance = 0;
+  runSpeed = 0;
+  resetObstacles();
+  distLabel.textContent = '0';
+  document.querySelector('#title').innerHTML = 'WIPE<br>OUT.';
+  document.querySelector('#copy').textContent = 'You hit an obstacle. Start again and pick a cleaner line downhill.';
+  startButton.textContent = 'Ride again';
+  overlay.classList.remove('hidden');
 }
 startButton.addEventListener('click', begin);
 window.addEventListener('keydown', event => {
