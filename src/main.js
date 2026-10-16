@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 const root = document.querySelector('#game');
 const distLabel = document.querySelector('#dist');
@@ -116,7 +118,7 @@ function makeRoofMaterial(color) {
   return new THREE.MeshStandardMaterial({ map: texture, color: '#ffffff', roughness: .92 });
 }
 const roofMaterials = ['#b76342', '#c27349', '#a9573e', '#bc7048'].map(makeRoofMaterial);
-const wallColors = ['#dfc69b', '#b7c5ba', '#d9b998', '#d8ceb0', '#b7c4c1', '#d3b184'];
+const wallColors = ['#efc98f', '#d9a38a', '#a8c3a0', '#e5dbb9', '#9fbac2', '#d7b4a0'];
 const woodMat = mat('#78523a');
 const stoneMats = ['#9d8971', '#817a68', '#aa9274'].map(c => mat(c));
 const glassMats = ['#3e7180', '#426f80', '#56818b'].map(c => new THREE.MeshStandardMaterial({ color: c, roughness: .32, metalness: .12 }));
@@ -217,6 +219,123 @@ for (let row = 0; row < 18; row++) {
   houses.push(makeHouse(-1, row, z));
   houses.push(makeHouse(1, row + 2, z + (row % 2 ? 3.2 : 0)));
 }
+
+function makeMossWallTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#f5eee1';
+  ctx.fillRect(0, 0, size, size);
+
+  // Fine warm stucco grain underneath irregular, soft-edged moss patches.
+  let seed = 7319;
+  const random = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 0x100000000;
+  };
+  for (let i = 0; i < 3600; i++) {
+    const light = random() > .5;
+    ctx.fillStyle = light ? 'rgba(245,222,185,0.10)' : 'rgba(92,65,39,0.07)';
+    const x = random() * size, y = random() * size, r = .5 + random() * 2.2;
+    ctx.fillRect(x, y, r, r);
+  }
+  for (let i = 0; i < 66; i++) {
+    const x = random() * size, y = random() * size;
+    const rx = 10 + random() * 42, ry = 7 + random() * 28;
+    const moss = random() > .42 ? [56, 78, 43] : [105, 115, 67];
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate((random() - .5) * Math.PI);
+    ctx.scale(rx, ry);
+    const patch = ctx.createRadialGradient(0, 0, .05, 0, 0, 1);
+    patch.addColorStop(0, `rgba(${moss[0]},${moss[1]},${moss[2]},0.62)`);
+    patch.addColorStop(.48, `rgba(${moss[0]},${moss[1]},${moss[2]},0.40)`);
+    patch.addColorStop(1, `rgba(${moss[0]},${moss[1]},${moss[2]},0)`);
+    ctx.fillStyle = patch;
+    ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+  texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return texture;
+}
+
+const houseLoader = new GLTFLoader();
+houseLoader.load(`${import.meta.env.BASE_URL}assets/mediterranean-house.glb`, ({ scene: houseModel }) => {
+  const mossTexture = makeMossWallTexture();
+  houseModel.updateMatrixWorld(true);
+  const geometryByMaterial = new Map();
+  houseModel.traverse(object => {
+    if (!object.isMesh) return;
+    object.castShadow = true;
+    object.receiveShadow = true;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    for (let i = 0; i < materials.length; i++) {
+      const material = materials[i];
+      const geometry = object.geometry.clone();
+      if (object.isSkinnedMesh) geometry.applyMatrix4(object.matrixWorld);
+      else geometry.applyMatrix4(object.matrixWorld);
+      if (!geometryByMaterial.has(material)) geometryByMaterial.set(material, []);
+      geometryByMaterial.get(material).push(geometry);
+    }
+  });
+
+  // Merge parts by material once; each reused house is then only a small set
+  // of meshes, rather than hundreds of individual roof tiles and trim pieces.
+  const houseTemplate = new THREE.Group();
+  for (const [sourceMaterial, geometries] of geometryByMaterial) {
+    const merged = mergeGeometries(geometries, false);
+    geometries.forEach(geometry => geometry.dispose());
+    if (!merged) continue;
+    const material = sourceMaterial.clone();
+    if (material.name === 'Warm ochre stucco') {
+      material.map = mossTexture;
+      material.color.set('#ffffff');
+      material.roughness = .94;
+      material.bumpMap = mossTexture;
+      material.bumpScale = .018;
+    }
+    const mesh = new THREE.Mesh(merged, material);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    houseTemplate.add(mesh);
+  }
+
+  // Replace the whole generated town with scaled, color-varied instances of
+  // the Blender house. Each instance keeps the normal road recycling behavior.
+  for (const house of houses) scene.remove(house);
+  houses.length = 0;
+  for (let row = 0; row < 18; row++) {
+    const z = -18 + row * 12.8;
+    for (const [side, index, houseZ] of [
+      [-1, row, z],
+      [1, row + 2, z + (row % 2 ? 3.2 : 0)],
+    ]) {
+      const detailedHouse = houseTemplate.clone(true);
+      const color = new THREE.Color(wallColors[(index * 5 + (side > 0 ? 1 : 0)) % wallColors.length]);
+      detailedHouse.traverse(object => {
+        if (!object.isMesh || object.material.name !== 'Warm ochre stucco') return;
+        object.material = object.material.clone();
+        object.material.color.copy(color);
+      });
+      const scale = 1.5 * (0.94 + ((index * 7 + (side > 0 ? 3 : 0)) % 8) * .025);
+      detailedHouse.scale.set(scale, scale * .7, scale * .74);
+      detailedHouse.rotation.y = side < 0 ? Math.PI / 2 : -Math.PI / 2;
+      const worldX = side * (13.8 + (index % 3) * .75);
+      detailedHouse.position.set(worldX, groundY(houseZ) + .42, houseZ);
+      detailedHouse.userData.side = side;
+      detailedHouse.userData.index = index;
+      detailedHouse.userData.worldZ = houseZ;
+      detailedHouse.userData.worldX = worldX;
+      detailedHouse.userData.groundOffset = .42;
+      scene.add(detailedHouse);
+      houses.push(detailedHouse);
+    }
+  }
+}, undefined, error => console.error('Could not load the Blender house asset:', error));
 
 // A few roadside work props break up the descent and leave plenty of open road between them.
 const obstacleCycle = roadLength * roadSegments.length;
@@ -585,7 +704,7 @@ function updateHouses() {
     if (playerZ > house.userData.worldZ + 28) {
       house.userData.worldZ += 230.4;
       house.position.z = house.userData.worldZ;
-      house.position.y = groundY(house.position.z);
+      house.position.y = groundY(house.position.z) + (house.userData.groundOffset || 0);
     }
   }
 }
