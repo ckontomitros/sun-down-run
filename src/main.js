@@ -71,6 +71,7 @@ function stripGeometry(xMin, xMax, length, zDivisions = 50) {
 function createRoadSegment(startZ) {
   const group = new THREE.Group();
   group.position.set(0, groundY(startZ), startZ);
+  group.userData.startZ = startZ;
   const add = (x0, x1, material, yOffset = 0) => {
     const mesh = new THREE.Mesh(stripGeometry(x0, x1, roadLength, 60), material);
     mesh.position.y = yOffset;
@@ -208,6 +209,7 @@ function makeHouse(side, index, z) {
   group.userData.index = index;
   group.userData.worldX = worldX;
   group.userData.worldZ = z;
+  group.userData.startWorldZ = z;
   group.userData.width = width;
   scene.add(group);
   return group;
@@ -329,6 +331,7 @@ houseLoader.load(`${import.meta.env.BASE_URL}assets/mediterranean-house.glb`, ({
       detailedHouse.userData.side = side;
       detailedHouse.userData.index = index;
       detailedHouse.userData.worldZ = houseZ;
+      detailedHouse.userData.startWorldZ = houseZ;
       detailedHouse.userData.worldX = worldX;
       detailedHouse.userData.groundOffset = .42;
       scene.add(detailedHouse);
@@ -458,50 +461,24 @@ for (let i = 0; i < 16; i++) {
 
 const board = new THREE.Group();
 scene.add(board);
-const deckShape = new THREE.Shape();
-deckShape.moveTo(-.22, 1.19);
-deckShape.quadraticCurveTo(-.36, 1.2, -.36, .98);
-deckShape.lineTo(-.29, -.94);
-deckShape.quadraticCurveTo(-.28, -1.2, 0, -1.27);
-deckShape.quadraticCurveTo(.28, -1.2, .29, -.94);
-deckShape.lineTo(.36, .98);
-deckShape.quadraticCurveTo(.36, 1.2, .22, 1.19);
-deckShape.closePath();
-const deckGeometry = new THREE.ExtrudeGeometry(deckShape, { depth: .13, bevelEnabled: true, bevelSegments: 2, steps: 1, bevelSize: .025, bevelThickness: .025 });
-const deck = new THREE.Mesh(deckGeometry, mat('#ed863d', .48));
-deck.rotation.x = -Math.PI / 2;
-deck.position.y = .27;
-deck.castShadow = true; deck.receiveShadow = true;
-board.add(deck);
-const grip = new THREE.Mesh(new THREE.ShapeGeometry(deckShape), mat('#e99a4e', .8));
-grip.rotation.x = -Math.PI / 2;
-grip.position.y = .405;
-board.add(grip);
-const boardStripe = addBox(board, boxGeo, mat('#f4c773', .55), [0, .42, 0], [.055, .025, 1.65], false);
-boardStripe.rotation.x = 0;
-
-const truckMat = mat('#9ca3a0', .38, { metalness: .55 });
-const wheelMat = mat('#de7037', .48);
-const axleGeo = new THREE.CylinderGeometry(.045, .045, .83, 12);
-const wheelGeo = new THREE.CylinderGeometry(.16, .16, .12, 16);
 const wheels = [];
-for (const z of [-.76, .76]) {
-  const truck = new THREE.Mesh(axleGeo, truckMat);
-  truck.rotation.z = Math.PI / 2;
-  truck.position.set(0, .23, z);
-  truck.castShadow = true; board.add(truck);
-  addBox(board, boxGeo, truckMat, [0, .22, z], [.23, .11, .2]);
-  for (const x of [-.4, .4]) {
-    const wheel = new THREE.Mesh(wheelGeo, wheelMat);
-    wheel.rotation.z = Math.PI / 2;
-    wheel.position.set(x, .16, z);
-    wheel.castShadow = true; wheel.receiveShadow = true;
-    board.add(wheel); wheels.push(wheel);
-  }
-}
+const skateboardLoader = new GLTFLoader();
+skateboardLoader.load(`${import.meta.env.BASE_URL}assets/skateboard.glb`, ({ scene: skateboardModel }) => {
+  // The Blender model is X-long and Z-up; turn it into the game's Z-long, Y-up coordinates.
+  skateboardModel.rotation.y = Math.PI / 2;
+  skateboardModel.scale.setScalar(.95);
+  skateboardModel.traverse(object => {
+    if (!object.isMesh) return;
+    object.castShadow = true;
+    object.receiveShadow = true;
+    if (object.name.toLowerCase().includes('wheel | orange urethane')) wheels.push(object);
+  });
+  board.add(skateboardModel);
+}, undefined, error => console.error('Could not load the Blender skateboard asset:', error));
 
 const rider = new THREE.Group();
 board.add(rider);
+rider.position.y = .12;
 const shirtMat = mat('#3189b2', .8);
 const shirtLightMat = mat('#48a2c7', .8);
 const shortsMat = mat('#296c89', .83);
@@ -596,7 +573,9 @@ const held = { left: false, right: false };
 
 function begin() {
   running = true; playerZ = 0; steer = 0; velocity = 0; cameraX = 0; runDistance = 0; runSpeed = 12;
+  resetRoadSegments();
   resetObstacles();
+  resetHouses();
   startButton.textContent = 'Start rolling';
   overlay.classList.add('hidden');
   previousTime = performance.now();
@@ -699,6 +678,12 @@ function updateRoad() {
   }
 }
 
+function resetRoadSegments() {
+  for (const segment of roadSegments) {
+    segment.position.set(0, groundY(segment.userData.startZ), segment.userData.startZ);
+  }
+}
+
 function updateHouses() {
   for (const house of houses) {
     if (playerZ > house.userData.worldZ + 28) {
@@ -706,6 +691,14 @@ function updateHouses() {
       house.position.z = house.userData.worldZ;
       house.position.y = groundY(house.position.z) + (house.userData.groundOffset || 0);
     }
+  }
+}
+
+function resetHouses() {
+  for (const house of houses) {
+    house.userData.worldZ = house.userData.startWorldZ;
+    house.position.z = house.userData.startWorldZ;
+    house.position.y = groundY(house.position.z) + (house.userData.groundOffset || 0);
   }
 }
 
@@ -726,9 +719,10 @@ function updateScene(dt, time) {
   board.position.set(playerX, playerY, playerZ);
   const desiredHeading = THREE.MathUtils.clamp(Math.atan2(velocity * 2.3, runSpeed), -.62, .62);
   board.rotation.y += (desiredHeading - board.rotation.y) * (1 - Math.exp(-dt * 4.8));
+  board.rotation.x = Math.atan(grade);
   board.rotation.z = THREE.MathUtils.clamp(-velocity * .012, -.09, .09);
   rider.position.y = Math.sin(time * 5.3) * .018;
-  for (const wheel of wheels) wheel.rotation.y -= runSpeed * dt / .16;
+  for (const wheel of wheels) wheel.rotateZ(-runSpeed * dt / .205);
   boardShadow.position.set(playerX, groundY(playerZ) + .035, playerZ);
 
   // The camera starts centered behind the rider, then catches up with gentle spring lag when steering.
