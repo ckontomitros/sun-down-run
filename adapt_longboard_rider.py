@@ -1,12 +1,12 @@
 import bpy
-from mathutils import Vector
+from mathutils import Euler, Vector
 
 OUT = '/Users/A200255476/Documents/ChatGPT/lofisurf'
 GLB = OUT + '/public/assets/ohto-longboard-rider.glb'
 
 # Let the adaptation script be safely rerun from Blender's console.
 for obj in list(bpy.data.objects):
-    if obj.name.startswith('Backpack |') or any(collection.name == 'UNAPPLIED' for collection in obj.users_collection):
+    if obj.name.startswith('Backpack |') or any(collection.name == 'UNAPLLIED' for collection in obj.users_collection):
         bpy.data.objects.remove(obj, do_unlink=True)
 
 # Keep the character meshes that are enabled in the authored view layer; the source
@@ -39,46 +39,55 @@ for material in bpy.data.materials:
     material.node_tree.links.new(principled.outputs['BSDF'], output.inputs['Surface'])
     material.diffuse_color = color
 
-def make_mat(name, rgba, roughness=0.82):
-    material = bpy.data.materials.new(name)
-    material.diffuse_color = rgba
-    material.use_nodes = True
-    shader = material.node_tree.nodes.get('Principled BSDF')
-    shader.inputs['Base Color'].default_value = rgba
-    shader.inputs['Roughness'].default_value = roughness
-    return material
+# The mesh has disconnected leg islands. Rotate the right leg gently at its hip
+# and shift its shoe back, giving the rider a front/back longboard stance.
+def components(mesh):
+    parent = list(range(len(mesh.vertices)))
+    def find(i):
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+    for edge in mesh.edges:
+        a, b = find(edge.vertices[0]), find(edge.vertices[1])
+        if a != b:
+            parent[b] = a
+    groups = {}
+    for vertex in mesh.vertices:
+        groups.setdefault(find(vertex.index), []).append(vertex.index)
+    return list(groups.values())
 
-pack = make_mat('Longboard rider | ochre canvas pack', (0.62, 0.34, 0.09, 1))
-pack_light = make_mat('Longboard rider | golden piping', (0.84, 0.56, 0.20, 1))
-pack_dark = make_mat('Longboard rider | leather straps', (0.23, 0.15, 0.075, 1))
-zipper = make_mat('Longboard rider | brass hardware', (0.60, 0.42, 0.14, 1), 0.38)
+body = bpy.data.objects.get('full body')
+if body:
+    for indices in components(body.data):
+        verts = [body.data.vertices[i] for i in indices]
+        center_x = sum(v.co.x for v in verts) / len(verts)
+        max_z = max(v.co.z for v in verts)
+        min_z = min(v.co.z for v in verts)
+        if center_x > 0.04 and min_z < 0.12 and max_z < 1.1:
+            pivot = Vector((center_x, 0.0, max_z))
+            rotation = Euler((0.42, 0, 0), 'XYZ').to_quaternion()
+            for vertex in verts:
+                offset = vertex.co - pivot
+                offset.rotate(rotation)
+                vertex.co = pivot + offset
+    body.data.update()
 
-def box(name, location, dimensions, material, bevel=0.035):
-    bpy.ops.mesh.primitive_cube_add(size=1, location=location)
-    obj = bpy.context.object
-    obj.name = name
-    obj.dimensions = dimensions
-    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
-    obj.data.materials.append(material)
-    if bevel:
-        modifier = obj.modifiers.new('Rounded canvas seams', 'BEVEL')
-        modifier.width = bevel
-        modifier.segments = 3
-        obj.modifiers.new('Soft weighted normals', 'WEIGHTED_NORMAL')
-    return obj
+# The shoe mesh is split into islands for sole, upper, and laces; move them together.
+shoe = bpy.data.objects.get('shoes')
+if shoe:
+    for vertex in shoe.data.vertices:
+        if vertex.co.x > 0.08:
+            vertex.co.y += 0.42
+    shoe.data.update()
 
-# In this Blender file the character faces -Y, so +Y is her back.
-box('Backpack | rounded body', (0, 0.365, 1.46), (0.62, 0.29, 0.72), pack, 0.11)
-box('Backpack | upper flap', (0, 0.535, 1.72), (0.55, 0.075, 0.20), pack_light, 0.05)
-box('Backpack | main pocket', (0, 0.535, 1.43), (0.48, 0.08, 0.31), pack, 0.045)
-box('Backpack | pocket flap', (0, 0.585, 1.57), (0.44, 0.025, 0.085), pack_light, 0.025)
-for side in (-1, 1):
-    box('Backpack | side pocket', (side * 0.32, 0.38, 1.42), (0.09, 0.21, 0.23), pack_light, 0.035)
-    box('Backpack | shoulder strap', (side * 0.22, -0.205, 1.45), (0.075, 0.075, 0.70), pack_dark, 0.03)
-    box('Backpack | strap tab', (side * 0.22, -0.22, 1.18), (0.09, 0.035, 0.11), pack_light, 0.02)
-box('Backpack | center buckle', (0, 0.607, 1.57), (0.055, 0.018, 0.06), zipper, 0.01)
-for height in (1.30, 1.56):
-    box('Backpack | stitched piping', (0, 0.59, height), (0.37, 0.014, 0.014), pack_dark, 0.004)
+# The side shorts panel follows the shifted leg enough to keep the hem connected.
+short_panel = bpy.data.objects.get('trouser')
+if short_panel:
+    for vertex in short_panel.data.vertices:
+        if vertex.co.x > 0:
+            vertex.co.y += 0.14
+    short_panel.data.update()
 
 # Save the Blender source in the normal modeling workspace with the character framed.
 layout = bpy.data.workspaces.get('Layout')

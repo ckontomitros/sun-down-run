@@ -511,6 +511,7 @@ const held = { left: false, right: false };
 
 function begin() {
   running = true; playerZ = 0; steer = 0; velocity = 0; cameraX = 0; runDistance = 0; runSpeed = 12;
+  dragInput = 0;
   resetRoadSegments();
   resetObstacles();
   resetHouses();
@@ -521,6 +522,7 @@ function begin() {
 
 function endRun() {
   running = false;
+  dragInput = 0;
   playerZ = 0;
   steer = 0;
   velocity = 0;
@@ -547,16 +549,17 @@ window.addEventListener('keyup', event => {
   if (key === 'arrowleft' || key === 'a') held.left = false;
   if (key === 'arrowright' || key === 'd') held.right = false;
 });
-let dragging = false, dragPointerId = null, dragInput = 0;
+let dragging = false, dragPointerId = null, dragInput = 0, dragStartX = 0;
 function pointToDragInput(event) {
   const bounds = renderer.domElement.getBoundingClientRect();
-  const normalizedX = ((event.clientX - bounds.left) / bounds.width) * 2 - 1;
-  dragInput = THREE.MathUtils.clamp(-normalizedX, -1, 1);
+  const dragRange = THREE.MathUtils.clamp(bounds.width * .16, 70, 140);
+  dragInput = THREE.MathUtils.clamp((dragStartX - event.clientX) / dragRange, -1, 1);
 }
 renderer.domElement.addEventListener('pointerdown', event => {
   if (!running || dragPointerId !== null || event.button !== 0) return;
   dragging = true;
   dragPointerId = event.pointerId;
+  dragStartX = event.clientX;
   pointToDragInput(event);
   renderer.domElement.setPointerCapture(event.pointerId);
 });
