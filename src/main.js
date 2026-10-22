@@ -479,78 +479,16 @@ skateboardLoader.load(`${import.meta.env.BASE_URL}assets/skateboard.glb`, ({ sce
 const rider = new THREE.Group();
 board.add(rider);
 rider.position.y = .12;
-const shirtMat = mat('#3189b2', .8);
-const shirtLightMat = mat('#48a2c7', .8);
-const shortsMat = mat('#296c89', .83);
-const skinMat = mat('#e6a56e', .84);
-const sockMat = mat('#357da2', .82);
-const shoeMat = mat('#d4c7a7', .85);
-const laceMat = mat('#f1e8d5', .8);
-const packMat = mat('#d69630', .8);
-const packDarkMat = mat('#a96d24', .8);
-const hairMat = mat('#75442b', .91);
-const hairLightMat = mat('#925a36', .9);
-const seamLineMat = mat('#67472f', .85);
-
-function addCapsule(parent, a, b, radius, material) {
-  const from = new THREE.Vector3(...a), to = new THREE.Vector3(...b);
-  const delta = new THREE.Vector3().subVectors(to, from);
-  const geometry = new THREE.CapsuleGeometry(radius, Math.max(.02, delta.length() - radius * 2), 4, 9);
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.position.copy(from).add(to).multiplyScalar(.5);
-  mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.normalize());
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  parent.add(mesh);
-  return mesh;
-}
-
-// Staggered feet and bent knees give the rider a balanced downhill stance.
-addBox(rider, boxGeo, shortsMat, [0, 1.28, 0], [.66, .39, .58]);
-addCapsule(rider, [-.2, 1.16, .24], [-.27, .78, .38], .095, skinMat);
-addCapsule(rider, [.2, 1.16, -.24], [.25, .78, -.38], .095, skinMat);
-for (const [x, z] of [[-.27, .38], [.25, -.38]]) {
-  const sock = new THREE.Mesh(new THREE.CylinderGeometry(.085, .1, .29, 10), sockMat);
-  sock.position.set(x, .64, z); sock.castShadow = true; rider.add(sock);
-  addBox(rider, boxGeo, shoeMat, [x, .47, z], [.25, .15, .43]);
-  addBox(rider, boxGeo, laceMat, [x, .55, z + .04], [.15, .025, .14], false);
-}
-
-const torso = new THREE.Mesh(new THREE.CapsuleGeometry(.34, .67, 5, 12), shirtMat);
-torso.position.set(0, 2.02, 0);
-torso.rotation.x = -.08;
-torso.castShadow = true; torso.receiveShadow = true; rider.add(torso);
-addBox(rider, boxGeo, shortsMat, [0, 1.48, 0], [.56, .18, .49]);
-const neck = new THREE.Mesh(new THREE.CylinderGeometry(.12, .14, .2, 10), skinMat);
-neck.position.set(0, 2.56, .02); rider.add(neck);
-const head = new THREE.Mesh(new THREE.SphereGeometry(.27, 16, 12), skinMat);
-head.position.set(0, 2.83, .035); head.castShadow = true; rider.add(head);
-const hair = new THREE.Mesh(new THREE.SphereGeometry(.29, 14, 10), hairMat);
-hair.scale.set(1.02, .84, .92); hair.position.set(0, 2.91, -.07); hair.castShadow = true; rider.add(hair);
-const bun = new THREE.Mesh(new THREE.SphereGeometry(.16, 12, 9), hairLightMat);
-bun.position.set(0, 3.15, -.11); bun.castShadow = true; rider.add(bun);
-for (const side of [-1, 1]) {
-  const lock = new THREE.Mesh(new THREE.SphereGeometry(.12, 10, 8), hairMat);
-  lock.scale.set(.75, 1.35, .78); lock.position.set(side * .2, 2.79, -.04); rider.add(lock);
-}
-
-// Small backpack, front pocket, seams and straps, kept behind the torso like the reference.
-addBox(rider, boxGeo, packMat, [0, 2.04, -.39], [.66, .82, .31]);
-addBox(rider, boxGeo, packDarkMat, [0, 1.81, -.565], [.49, .3, .055]);
-addBox(rider, boxGeo, packMat, [0, 1.99, -.6], [.43, .035, .025], false);
-for (const side of [-1, 1]) {
-  addBox(rider, boxGeo, packDarkMat, [side * .22, 2.3, -.15], [.075, .55, .075], false);
-  addBox(rider, boxGeo, packDarkMat, [side * .29, 1.98, -.46], [.06, .12, .2], false);
-}
-// Relaxed arms held out slightly for balance.
-for (const side of [-1, 1]) {
-  const shoulder = [side * .29, 2.34, .02];
-  const elbow = [side * .59, 2.08 + side * .04, .1];
-  const hand = [side * .83, 1.91 + side * .08, .22];
-  addCapsule(rider, shoulder, elbow, .115, shirtLightMat);
-  addCapsule(rider, elbow, hand, .085, skinMat);
-  const palm = new THREE.Mesh(new THREE.SphereGeometry(.095, 10, 8), skinMat);
-  palm.position.set(...hand); palm.castShadow = true; rider.add(palm);
-}
+const riderLoader = new GLTFLoader();
+riderLoader.load(`${import.meta.env.BASE_URL}assets/ohto-longboard-rider.glb`, ({ scene: riderModel }) => {
+  riderModel.scale.setScalar(1.2);
+  riderModel.traverse(object => {
+    if (!object.isMesh) return;
+    object.castShadow = true;
+    object.receiveShadow = true;
+  });
+  rider.add(riderModel);
+}, undefined, error => console.error('Could not load the Ohto longboard rider asset:', error));
 
 const boardShadow = new THREE.Mesh(new THREE.CircleGeometry(1.55, 32), new THREE.MeshBasicMaterial({ color: '#203b35', transparent: true, opacity: .34, depthWrite: false }));
 boardShadow.rotation.x = -Math.PI / 2;
@@ -721,7 +659,7 @@ function updateScene(dt, time) {
   board.rotation.y += (desiredHeading - board.rotation.y) * (1 - Math.exp(-dt * 4.8));
   board.rotation.x = Math.atan(grade);
   board.rotation.z = THREE.MathUtils.clamp(-velocity * .012, -.09, .09);
-  rider.position.y = Math.sin(time * 5.3) * .018;
+  rider.position.y = .12 + Math.sin(time * 5.3) * .018;
   for (const wheel of wheels) wheel.rotateZ(-runSpeed * dt / .205);
   boardShadow.position.set(playerX, groundY(playerZ) + .035, playerZ);
 
