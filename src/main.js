@@ -478,17 +478,17 @@ skateboardLoader.load(`${import.meta.env.BASE_URL}assets/skateboard.glb`, ({ sce
 
 const rider = new THREE.Group();
 board.add(rider);
-rider.position.y = .12;
+rider.position.y = .5;
 const riderLoader = new GLTFLoader();
-riderLoader.load(`${import.meta.env.BASE_URL}assets/ohto-longboard-rider.glb`, ({ scene: riderModel }) => {
-  riderModel.scale.setScalar(1.2);
+riderLoader.load(`${import.meta.env.BASE_URL}assets/anime-longboard-rider.glb`, ({ scene: riderModel }) => {
+  riderModel.scale.setScalar(2);
   riderModel.traverse(object => {
     if (!object.isMesh) return;
     object.castShadow = true;
     object.receiveShadow = true;
   });
   rider.add(riderModel);
-}, undefined, error => console.error('Could not load the Ohto longboard rider asset:', error));
+}, undefined, error => console.error('Could not load the anime longboard rider asset:', error));
 
 const boardShadow = new THREE.Mesh(new THREE.CircleGeometry(1.55, 32), new THREE.MeshBasicMaterial({ color: '#203b35', transparent: true, opacity: .34, depthWrite: false }));
 boardShadow.rotation.x = -Math.PI / 2;
@@ -659,7 +659,6 @@ function updateScene(dt, time) {
   board.rotation.y += (desiredHeading - board.rotation.y) * (1 - Math.exp(-dt * 4.8));
   board.rotation.x = Math.atan(grade);
   board.rotation.z = THREE.MathUtils.clamp(-velocity * .012, -.09, .09);
-  rider.position.y = .12 + Math.sin(time * 5.3) * .018;
   for (const wheel of wheels) wheel.rotateZ(-runSpeed * dt / .205);
   boardShadow.position.set(playerX, groundY(playerZ) + .035, playerZ);
 
